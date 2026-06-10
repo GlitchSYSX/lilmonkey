@@ -380,6 +380,7 @@
       </div>
       <button class="btn-mint" onclick="mintNFT()">MINT FREE</button>
       <span class="btn-sub">max 5 per wallet</span>
+      <span id="supplyInfo" class="btn-sub" style="margin-top:8px;color:var(--accent);"></span>
     </div>
   </div>
 
@@ -427,12 +428,22 @@
     let mintQty = 1;
     const MAX_QTY = 5;
 
+    const NFT_CONTRACT = "0xc52e1fa559b033ea56984DE530951D393aeD1Eb2";
+    const SEADROP_CONTRACT = "0x00005EA00Ac477B1030CE78506496e8C2dE24bf5";
+
+    const SEADROP_ABI = [
+      "function mintPublic(address nftContract, address feeRecipient, address minterIfNotPayer, uint256 quantity) payable"
+    ];
+
+    const NFT_ABI = [
+      "function getMintStats(address minter) view returns (uint256 minterNumMinted, uint256 currentTotalSupply, uint256 maxSupply)"
+    ];
+
     async function connectWallet() {
       if (!window.ethereum) {
         alert('No Web3 wallet found!\nInstall MetaMask, Trust Wallet, or Coinbase Wallet.');
         return;
       }
-
       try {
         const btn = document.getElementById('connectBtn');
         btn.textContent = 'CONNECTING...';
@@ -445,14 +456,24 @@
 
         btn.textContent = short;
         btn.style.fontSize = '10px';
-        document.getElementById('walletStatus').innerHTML = 
+        document.getElementById('walletStatus').innerHTML =
           '<span style="color:var(--accent)">✓ Connected</span>';
 
         document.getElementById('mintBox').style.display = 'block';
+
+        // Load mint stats
+        try {
+          const nft = new ethers.Contract(NFT_CONTRACT, NFT_ABI, provider);
+          const stats = await nft.getMintStats(address);
+          const minted = Number(stats[1]);
+          const max = Number(stats[2]);
+          document.getElementById('supplyInfo').textContent = minted + ' / ' + max + ' minted';
+        } catch(e) {}
+
       } catch (err) {
         const btn = document.getElementById('connectBtn');
         btn.textContent = 'CONNECT WALLET';
-        document.getElementById('walletStatus').innerHTML = 
+        document.getElementById('walletStatus').innerHTML =
           'Connection cancelled<span class="blink">_</span>';
       }
     }
@@ -464,8 +485,33 @@
 
     async function mintNFT() {
       if (!signer) { alert('Connect wallet first!'); return; }
-      // TODO: replace with your actual contract address & ABI
-      alert('Contract not deployed yet.\nCome back on mint day! 🐒');
+      try {
+        const mintBtn = document.querySelector('#mintBox .btn-mint');
+        mintBtn.textContent = 'MINTING...';
+
+        const seadrop = new ethers.Contract(SEADROP_CONTRACT, SEADROP_ABI, signer);
+        const minterAddress = await signer.getAddress();
+
+        // Free mint - value 0
+        const tx = await seadrop.mintPublic(
+          NFT_CONTRACT,
+          "0x0000000000000000000000000000000000000000", // fee recipient
+          minterAddress,
+          mintQty,
+          { value: 0n }
+        );
+
+        mintBtn.textContent = 'WAITING...';
+        await tx.wait();
+
+        mintBtn.textContent = 'MINTED! 🐒';
+        document.getElementById('walletStatus').innerHTML =
+          '<span style="color:var(--accent)">✓ Mint success! Check OpenSea</span>';
+      } catch (err) {
+        const mintBtn = document.querySelector('#mintBox .btn-mint');
+        mintBtn.textContent = 'MINT FREE';
+        alert('Mint failed: ' + (err.reason || err.message));
+      }
     }
   </script>
 </body>
